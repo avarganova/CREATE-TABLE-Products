@@ -1,0 +1,152 @@
+########### [FRAGMENT 1] ###########
+
+
+CREATE TABLE Products (
+    ID INT AUTO_INCREMENT PRIMARY KEY,
+    PRODUCT_ID INT NOT NULL,
+    PRODUCT_NAME VARCHAR(255) NOT NULL,
+    PRODUCT_PRICE DECIMAL(10, 2) NOT NULL,
+    PRODUCT_ARTICLE VARCHAR(50) NOT NULL,
+    PRODUCT_QUANTITY INT NOT NULL,
+    DATE_CREATE TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    IS_HIDDEN TINYINT(1) DEFAULT 0
+);
+
+
+
+########### [FRAGMENT 2] ###########
+
+
+class CProducts {
+    private $db;
+
+    public function __construct($dbConnection) {
+        $this->db = $dbConnection;
+    }
+
+    public function getProducts($limit) {
+        $stmt = $this->db->prepare("SELECT * FROM Products WHERE IS_HIDDEN = 0 ORDER BY DATE_CREATE DESC LIMIT ?");
+        $stmt->bind_param("i", $limit);
+        $stmt->execute();
+        return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
+}
+
+
+
+########### [FRAGMENT 3] ###########
+
+
+<?php
+// Подключение к базе данных
+$dbConnection = new mysqli("localhost", "username", "password", "database_name");
+$cProducts = new CProducts($dbConnection);
+$products = $cProducts->getProducts(10); // Получаем 10 товаров
+?>
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Товары</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Название</th>
+                <th>Цена</th>
+                <th>Артикул</th>
+                <th>Количество</th>
+                <th>Дата создания</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($products as $product): ?>
+                <tr id="product-<?= $product['ID'] ?>">
+                    <td><?= $product['PRODUCT_ID'] ?></td>
+                    <td><?= $product['PRODUCT_NAME'] ?></td>
+                    <td><?= $product['PRODUCT_PRICE'] ?></td>
+                    <td><?= $product['PRODUCT_ARTICLE'] ?></td>
+                    <td>
+                        <button class="decrease" data-id="<?= $product['ID'] ?>">-</button>
+                        <span class="quantity"><?= $product['PRODUCT_QUANTITY'] ?></span>
+                        <button class="increase" data-id="<?= $product['ID'] ?>">+</button>
+                    </td>
+                    <td><?= $product['DATE_CREATE'] ?></td>
+                    <td><button class="hide" data-id="<?= $product['ID'] ?>">Скрыть</button></td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+
+    <script>
+        $(document).on('click', '.hide', function() {
+            var productId = $(this).data('id');
+            $.ajax({
+                url: 'hide_product.php',
+                type: 'POST',
+                data: { id: productId },
+                success: function() {
+                    $('#product-' + productId).hide();
+                }
+            });
+        });
+
+        $(document).on('click', '.increase, .decrease', function() {
+            var productId = $(this).data('id');
+            var quantityElement = $(this).siblings('.quantity');
+            var currentQuantity = parseInt(quantityElement.text());
+
+            if ($(this).hasClass('increase')) {
+                currentQuantity++;
+            } else if ($(this).hasClass('decrease') && currentQuantity > 0) {
+                currentQuantity--;
+            }
+
+            quantityElement.text(currentQuantity);
+            $.ajax({
+                url: 'update_quantity.php',
+                type: 'POST',
+                data: { id: productId, quantity: currentQuantity }
+            });
+        });
+    </script>
+</body>
+</html>
+
+
+
+########### [FRAGMENT 4] ###########
+
+
+<?php
+$dbConnection = new mysqli("localhost", "username", "password", "database_name");
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id = intval($_POST['id']);
+    $stmt = $dbConnection->prepare("UPDATE Products SET IS_HIDDEN = 1 WHERE ID = ?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+}
+?>
+
+
+
+########### [FRAGMENT 5] ###########
+
+
+<?php
+$dbConnection = new mysqli("localhost", "username", "password", "database_name");
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id = intval($_POST['id']);
+    $quantity = intval($_POST['quantity']);
+    $stmt = $dbConnection->prepare("UPDATE Products SET PRODUCT_QUANTITY = ? WHERE ID = ?");
+    $stmt->bind_param("ii", $quantity, $id);
+    $stmt->execute();
+}
+?>
